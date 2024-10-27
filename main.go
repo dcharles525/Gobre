@@ -11,6 +11,10 @@ import (
 	"math/rand"
 )
 
+var (
+	storagePath="/dev/shm/"
+)
+
 func main(){
 
 	http.HandleFunc(
@@ -40,7 +44,7 @@ func handleConvertFile(
 		randBytes := strconv.Itoa(rand.Int())
 
 		filePtr, _ := os.OpenFile(
-			"/tmp/" + randBytes, 
+			storagePath + randBytes, 
 			os.O_WRONLY|os.O_CREATE, 
 			0644,
 		)
@@ -64,13 +68,15 @@ func handleConvertFile(
 			http.Error(responseWriter, fmt.Sprint(libreofficeCmdError), 500)
 		}
 
-		data, readFileError := os.ReadFile("/tmp/" + randBytes + "." + newFileType)
+		data, readFileError := os.ReadFile(storagePath + randBytes + "." + newFileType)
 
 		if readFileError != nil {
 			http.Error(responseWriter, fmt.Sprint(readFileError), 500)
 		}
 
 		responseWriter.Write(data)
+
+		cleanDevShm(randBytes, newFileType)
 	} else {
 		http.Error(responseWriter, "Invalid request method.", 405)
 	}
@@ -89,10 +95,16 @@ func runLibreoffice(
 		"bash",
 		"-c",
 		"libreoffice " + libreofficeOptions +
-		" -env:UserInstallation=file:///tmp/" + randBytes + "_lo " + 
+		" -env:UserInstallation=file://" + storagePath + randBytes + "_lo " + 
 		"--headless --convert-to " + newFileType + " " + randBytes,
 	)
 
-	libreofficeCmd.Dir="/tmp"
+	libreofficeCmd.Dir="/dev/shm"
 	return libreofficeCmd.Run()
+}
+
+func cleanDevShm(fileName string, newFileType string){
+	os.Remove(storagePath + fileName)
+	os.Remove(storagePath + fileName + "." + newFileType)
+	os.RemoveAll(storagePath + fileName + "_lo")
 }
